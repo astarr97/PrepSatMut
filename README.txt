@@ -30,12 +30,14 @@ chmod 777 Get_Children.sh
 #Variant pulling probably won't finish for a lot of nodes, I am not sure why it is so slow
 #You can run the following to check progress
 #python check_progress.py to check how much of each has finished, see the notes in the output file for more details
-#For some nodes, enough will get done that you can run:
+#You can then run:
 
 #python make_finish_variant_pulling.py ProgressReport.txt
-#This will create scripts that pull all variants for undone chromosomes and then cats things together and finishes things
-#However, there is a limit on the size of a shell script you can submit as a job and if that limit is reached you can't run the job
-#One potential workaround is to not run chromosomes less than 200 bases in length or something
+#This will create scripts that pull all variants for undone chromosomes
+#Due to the limit on the size of jobs that can be submitted, it breaks variant pulling into chunks of 5000 chromosomes
+#You can run ./drive_finish_var.sh to submit all those jobs, but it is worth noting that you can only submit around 1,000 jobs at once
+#It also creates files starting with "finish_fully" that then cat things together and finishes things when variant pulling is done
+#Still need to write scripts to check that variant pulling worked successfully
 
 #Output files
 #With standard parameters, you will get files for all runs ending in:
