@@ -8,7 +8,8 @@ prog_rep = sys.argv[1]
 v = pd.read_csv(prog_rep, skiprows = 3, sep = "\t")
 
 for index, row in v.iterrows():
-    if row["ApproxProportionDone"] == 1:
+    #This is not 1 because of some very small chromosomes that may not have variants
+    if row["ApproxProportionDone"] >= 0.98:
         files = os.listdir(row["Folder"])
         for f in files:
             if ".Variants.sort.bed" in f:
@@ -39,7 +40,12 @@ for index, row in v.iterrows():
         all_chroms = list(np.setdiff1d(all_chroms, [last_seen]))
         v2 = pd.read_csv(species + "/" + species + "_contigs.bed", sep = "\t", header = None)
         v2 = v2[~v2[0].isin(all_chroms)]
-        out = open("finish_vars_" + species + ".sh", 'w')
+        
+        #Ignore anything smaller than 50 bases
+        #v2 = v2[v2[2] >= 50]
+        
+        cur_num = 0
+        out = open("finish_vars_" + species + "." + str(cur_num) + ".sh", 'w')
         time="168"
         MEM="16GB"
         
@@ -53,12 +59,25 @@ for index, row in v.iterrows():
         out.write('cactus_path="/scratch/users/astarr97/Common_Software/cactus-bin-v2.6.13/bin/"\n')
         out.write('hal_path="/scratch/users/astarr97/PhyloP/hg38.447way.hal"\n\n')
         for i in v2[0]:
+            cur_num += 1
             out.write("${cactus_path}halSnps --noDupes --minSpeciesForSnp 1 --refSequence " + i +" --tsv ORTHOSPECIES/ORTHOSPECIES_CHILDRENDOT.".replace("ORTHOSPECIES", species).replace("CHILDRENDOT", CHILDREN.replace(",", ".")) + i + ".PC.tsv $hal_path ORTHOSPECIES CHILDREN\n".replace("ORTHOSPECIES", species).replace("CHILDREN", CHILDREN))
-        out.write("cat " + species + "/*.tsv > " + "ORTHOSPECIES/ORTHOSPECIES_CHILDRENDOT.allsnps.".replace("ORTHOSPECIES", species).replace("CHILDRENDOT", CHILDREN.replace(",", ".")) + "catted" + ".tsv\n")
-        out.write("python convert_tsv_to_bed.py ORTHOSPECIES/TSV_OUT".replace("ORTHOSPECIES", species).replace("TSV_OUT", NODE + "_" + CHILDREN.replace(",", ".") + ".allsnps.catted.tsv") + "\n")
-        snp_file = "ORTHOSPECIES/BED_OUT".replace("ORTHOSPECIES", species).replace("BED_OUT", NODE + "_" + CHILDREN.replace(",", ".")) + ".allsnps.catted.bed"
-        out.write("sort -u " + snp_file + " | sort -k1,1 -k2,2n > " + snp_file.replace(".bed", ".sort.bed") + "\n")
-        out.write("bedtools intersect -sorted -g ORTHOSPECIES/ORTHOSPECIES_contigs.sort.txt -wao -a ".replace("ORTHOSPECIES", species) + region_file.replace(".bed", ".sort.bed") + " -b " + snp_file.replace(".bed", ".sort.bed") + " > " + region_file.replace(".bed", ".Variants.sort.bed").replace(".Min500.Max3000.ProtDist200", "_" + CHILDREN.replace(",", ".")) + "\n")
-        out.write("rm " + species + "/*.PC.tsv\n")
-
+            if cur_num % 5000 == 0:
+                out.close()
+                out = open("finish_vars_" + species + "." + str(cur_num//5000) + ".sh", 'w')
+                out.write("#!/bin/bash\n#SBATCH --time=" + time + ":00:00\n#SBATCH -p hbfraser\n#SBATCH --mem=" + MEM + "\n#SBATCH -c 1\n\n")
+                out.write('cactus_path="/scratch/users/astarr97/Common_Software/cactus-bin-v2.6.13/bin/"\n')
+                out.write('hal_path="/scratch/users/astarr97/PhyloP/hg38.447way.hal"\n\n')
+        
         out.close()
+        out_finish = open("finish_fully_" + species + ".sh", 'w')
+        out_finish.write("#!/bin/bash\n#SBATCH --time=" + time + ":00:00\n#SBATCH -p hbfraser\n#SBATCH --mem=" + MEM + "\n#SBATCH -c 1\n\n")
+        out_finish.write('cactus_path="/scratch/users/astarr97/Common_Software/cactus-bin-v2.6.13/bin/"\n')
+        out_finish.write('hal_path="/scratch/users/astarr97/PhyloP/hg38.447way.hal"\n\n')
+        out_finish.write("cat " + species + "/*.tsv > " + "ORTHOSPECIES/ORTHOSPECIES_CHILDRENDOT.allsnps.".replace("ORTHOSPECIES", species).replace("CHILDRENDOT", CHILDREN.replace(",", ".")) + "catted" + ".tsv\n")
+        out_finish.write("python convert_tsv_to_bed.py ORTHOSPECIES/TSV_OUT".replace("ORTHOSPECIES", species).replace("TSV_OUT", NODE + "_" + CHILDREN.replace(",", ".") + ".allsnps.catted.tsv") + "\n")
+        snp_file = "ORTHOSPECIES/BED_OUT".replace("ORTHOSPECIES", species).replace("BED_OUT", NODE + "_" + CHILDREN.replace(",", ".")) + ".allsnps.catted.bed"
+        out_finish.write("sort -u " + snp_file + " | sort -k1,1 -k2,2n > " + snp_file.replace(".bed", ".sort.bed") + "\n")
+        out_finish.write("bedtools intersect -sorted -g ORTHOSPECIES/ORTHOSPECIES_contigs.sort.txt -wao -a ".replace("ORTHOSPECIES", species) + region_file.replace(".bed", ".sort.bed") + " -b " + snp_file.replace(".bed", ".sort.bed") + " > " + region_file.replace(".bed", ".Variants.sort.bed").replace(".Min500.Max3000.ProtDist200", "_" + CHILDREN.replace(",", ".")) + "\n")
+        out_finish.write("rm " + species + "/*.PC.tsv\n")
+
+        out_finish.close()
